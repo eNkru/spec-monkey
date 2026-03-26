@@ -1,0 +1,337 @@
+# Implementation Plan: spec-monkey
+
+## Overview
+
+Implement `spec-monkey` as a Node.js/TypeScript ESM CLI tool — a ground-up rewrite of the Python `autodev` project. This is a standalone project where the repo root is the `spec-monkey` package. Tasks proceed from project scaffolding through core modules, the main runner loop, and all CLI commands, finishing with integration wiring.
+
+## Tasks
+
+- [x] 1. Scaffold project structure and tooling
+  - Verify `package.json` (bin entry, dependencies: commander, zod, @iarna/toml, fast-check, vitest), `tsconfig.json` (strict, ESM, NodeNext, ES2022), `vitest.config.ts`, and `.gitignore` exist at the repo root
+  - Create empty barrel `index.ts` files for each module directory: `src/config/`, `src/taskStore/`, `src/backends/`, `src/gate/`, `src/runner/`, `src/reflection/`, `src/snapshot/`, `src/gitOps/`, `src/circuitBreaker/`, `src/heartbeat/`, `src/progress/`, `src/runtimeStatus/`, `src/skills/`, `src/detach/`, `src/dashboard/`, `src/init/`
+  - Create `src/errors.ts` with `ConfigError`, `RuntimeError`, `TaskAuditError`, `BackendNotFoundError`
+  - Create `src/types.ts` with shared interfaces: `GateCheck`, `GateResult`, `GateMetricResult`, `MetricOutcome`, `SnapshotEntry`, `Snapshot`, `RuntimeStatus`, `ExperimentLogEntry`, `CommandSpec`, `BackendResult`
+  - _Requirements: 19.1, 19.2, 19.4, 19.6_
+
+- [ ] 2. Implement Config module
+  - [ ] 2.1 Write `src/config/schema.ts` with the full `SpecMonkeyConfigSchema` zod object (all sections with defaults) and export `SpecMonkeyConfig` type
+    - Include all sections: `project`, `backend`, `run`, `files`, `verification`, `reflection`, `snapshot`, `circuit_breaker`, `git`, `detach`
+    - _Requirements: 2.1, 2.2, 19.3_
+  - [ ] 2.2 Write `src/config/loader.ts` implementing `loadConfig(path?: string): Promise<SpecMonkeyConfig>`
+    - Discover `spec-monkey.toml` by walking up from cwd when path is omitted
+    - Parse TOML, alias `[gate]` → `[verification]`, apply `SPEC_MONKEY_*` env overrides with type coercion, validate with zod, resolve relative paths
+    - Throw `ConfigError` for invalid `backend.default` or zod parse failure
+    - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6_
+  - [ ]* 2.3 Write property test for config round-trip (Property 1)
+    - **Property 1: Config round-trip**
+    - **Validates: Requirements 2.1, 2.7**
+  - [ ]* 2.4 Write property test for config defaults (Property 2)
+    - **Property 2: Config defaults for absent keys**
+    - **Validates: Requirements 2.2**
+  - [ ]* 2.5 Write property test for env var override (Property 3)
+    - **Property 3: Environment variable override**
+    - **Validates: Requirements 2.3**
+  - [ ]* 2.6 Write property test for invalid backend name (Property 4)
+    - **Property 4: Invalid backend name throws ConfigError**
+    - **Validates: Requirements 2.4**
+  - [ ]* 2.7 Write property test for relative path resolution (Property 5)
+    - **Property 5: Relative paths are resolved against config directory**
+    - **Validates: Requirements 2.5**
+  - [ ]* 2.8 Write unit tests for config loader
+    - Test `[gate]` alias, missing file error, TOML parse error, env override coercion
+    - _Requirements: 2.1–2.6_
+
+- [ ] 3. Implement TaskStore module
+  - [ ] 3.1 Write `src/taskStore/schema.ts` with `TaskSchema`, `TaskStoreSchema`, and exported `Task`/`TaskStore` types
+    - Include all fields with defaults: `passes`, `blocked`, `block_reason`, `attempt_history`, `learning_notes`
+    - _Requirements: 4.1, 4.9, 19.3_
+  - [ ] 3.2 Write `src/taskStore/store.ts` implementing `loadTaskStore`, `saveTaskStore`, `getNextPendingTask`, `markTaskPassed`, `blockTask`, `resetTasks`, `retryBlockedTasks`, `auditTask`
+    - `auditTask` validates `id`, `title`, `description`, non-empty `steps`, valid `completion` contract
+    - `blockTask` sets `blocked=true`, `block_reason`, and `blocked_at` ISO timestamp
+    - `markTaskPassed` sets `passes=true` and `completed_at` ISO timestamp
+    - _Requirements: 4.1, 4.4, 4.5, 4.6, 4.7, 4.8, 4.9, 4.10_
+  - [ ]* 3.3 Write property test for task store defaults (Property 8)
+    - **Property 8: Task store defaults for absent fields**
+    - **Validates: Requirements 4.1**
+  - [ ]* 3.4 Write property test for task validation rejection (Property 9)
+    - **Property 9: Task store validation rejects incomplete tasks**
+    - **Validates: Requirements 4.9**
+  - [ ]* 3.5 Write property test for task reset targeting (Property 10)
+    - **Property 10: Task reset only affects targeted tasks**
+    - **Validates: Requirements 4.4, 4.5, 4.6**
+  - [ ]* 3.6 Write property test for blockTask fields (Property 11)
+    - **Property 11: Task block sets required fields**
+    - **Validates: Requirements 4.7**
+  - [ ]* 3.7 Write property test for markTaskPassed fields (Property 12)
+    - **Property 12: Task completion sets required fields**
+    - **Validates: Requirements 4.8**
+  - [ ]* 3.8 Write unit tests for task store
+    - Test load failure, malformed JSON, list/next/block/reset/retry operations
+    - _Requirements: 4.1–4.10_
+
+- [ ] 4. Checkpoint — ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [ ] 5. Implement Backend Adapters
+  - [ ] 5.1 Write `src/backends/types.ts` with `BackendAdapter` interface and `BuildCommandOpts`
+    - _Requirements: 3.7_
+  - [ ] 5.2 Write `src/backends/claude.ts`, `codex.ts`, `gemini.ts`, `opencode.ts` each exporting a `BackendAdapter`
+    - Claude: `claude -p` + `--dangerously-skip-permissions` when `skip_permissions=true`
+    - Codex: `codex exec --yolo` or `--full-auto --dangerously-bypass-approvals-and-sandbox`
+    - Gemini: `gemini -p` + `--yolo` when `yolo=true`
+    - OpenCode: `opencode run` + `OPENCODE_PERMISSION` env var injection
+    - Each adapter checks binary existence in PATH and throws `BackendNotFoundError` if missing
+    - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.8_
+  - [ ] 5.3 Write `src/backends/index.ts` with `REGISTRY` and `getBackend(name)` factory
+    - _Requirements: 3.7_
+  - [ ] 5.4 Write `src/backends/executor.ts` implementing `spawnBackend` that spawns the process, merges stdout/stderr, tees to attempt log + main log + process.stdout, and returns `BackendResult`
+    - Handle exit code 130 (SIGINT) as a clean stop signal
+    - _Requirements: 6.1, 6.9_
+  - [ ]* 5.5 Write property test for backend command building (Property 6)
+    - **Property 6: Backend command building correctness**
+    - **Validates: Requirements 3.1, 3.2, 3.3, 3.4**
+  - [ ]* 5.6 Write property test for plan command vs standard command (Property 7)
+    - **Property 7: Plan command differs from standard command**
+    - **Validates: Requirements 3.6**
+  - [ ]* 5.7 Write unit tests for backend adapters
+    - Test each backend's flag construction, `BackendNotFoundError` when binary absent, non-zero exit throws `RuntimeError`
+    - _Requirements: 3.1–3.8_
+
+- [ ] 6. Implement Snapshot module
+  - [ ] 6.1 Write `src/snapshot/snapshot.ts` implementing `takeSnapshot(dirs, config)` and `diffSnapshots(before, after)`
+    - Walk directories recursively, record path + mtime + size
+    - Apply `ignore_dirs`, `ignore_path_globs`, `include_path_globs` filters
+    - Filter spec-monkey runtime artifacts (`task.json`, `progress.txt`, `logs/`) from diff output
+    - _Requirements: 11.1, 11.2, 11.3, 11.4, 11.5_
+  - [ ]* 6.2 Write property test for snapshot no-op (Property 20)
+    - **Property 20: Snapshot no-op produces empty diff**
+    - **Validates: Requirements 11.6**
+  - [ ]* 6.3 Write property test for snapshot ignore configuration (Property 21)
+    - **Property 21: Snapshot respects ignore configuration**
+    - **Validates: Requirements 11.2, 11.3**
+  - [ ]* 6.4 Write unit tests for snapshot
+    - Test diff with added/modified/deleted files, glob filtering, include_path_globs
+    - _Requirements: 11.1–11.6_
+
+- [ ] 7. Implement GitOps module
+  - [ ] 7.1 Write `src/gitOps/gitOps.ts` implementing `autoCommit`, `createExperimentCommit`, `revertCommit`, `readRecentGitHistory`, `isGitRepo`
+    - `isGitRepo`: check for `.git` directory; all operations return no-op result when false
+    - Detect `.git/index.lock` and return no-op with warning
+    - Log stderr and return no-op on `git add`/`git commit` failure
+    - `readRecentGitHistory(n)` returns `{ commitSha, subject, body, committedAt }[]`
+    - _Requirements: 10.1, 10.2, 10.3, 10.4, 10.5, 10.6, 10.7_
+  - [ ]* 7.2 Write unit tests for gitOps
+    - Test commit creation, revert, history read, no-op when not a git repo, index.lock handling
+    - _Requirements: 10.1–10.7_
+
+- [ ] 8. Implement CircuitBreaker module
+  - [ ] 8.1 Write `src/circuitBreaker/circuitBreaker.ts` implementing `CircuitBreaker` class with `recordAttempt`, `recordRateLimit`, `isTripped`, `reset`, and `getReason`
+    - Track consecutive no-progress attempts and consecutive identical-error attempts
+    - Detect rate-limit patterns from config; pause for `rate_limit_cooldown` seconds
+    - _Requirements: 12.1, 12.2, 12.3, 12.4_
+  - [ ]* 8.2 Write property test for circuit breaker threshold (Property 22)
+    - **Property 22: Circuit breaker opens at threshold**
+    - **Validates: Requirements 12.1, 12.2**
+  - [ ]* 8.3 Write unit tests for circuit breaker
+    - Test trip at threshold, no-trip below threshold, rate-limit detection, reset
+    - _Requirements: 12.1–12.4_
+
+- [ ] 9. Implement Gate module
+  - [ ] 9.1 Write `src/gate/gate.ts` implementing `runGate(task, changedFiles, config, opts)` returning `GateResult`
+    - Boolean gate: all validate commands exit 0 AND changed file count ≥ min
+    - Numeric gate: extract metric via `json_path` from last successful command's JSON stdout
+    - Classify metric outcome: `improved`, `unchanged`, `regressed`, `target_met`
+    - Reject validate commands containing shell control tokens before execution
+    - Respect `enforceChangeRequirements=false` to skip file checks
+    - Apply per-task `validate_working_directory` and `validate_environment` overrides
+    - Kill validate commands exceeding `validate_timeout_seconds`
+    - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7, 7.8, 7.10, 7.11_
+  - [ ]* 9.2 Write property test for boolean gate correctness (Property 14)
+    - **Property 14: Boolean gate correctness**
+    - **Validates: Requirements 7.1**
+  - [ ]* 9.3 Write property test for metric outcome classification (Property 15)
+    - **Property 15: Metric outcome classification**
+    - **Validates: Requirements 7.2, 7.3, 7.4, 7.5, 7.6**
+  - [ ]* 9.4 Write property test for enforceChangeRequirements=false (Property 16)
+    - **Property 16: enforceChangeRequirements=false skips file checks**
+    - **Validates: Requirements 7.7**
+  - [ ]* 9.5 Write property test for shell injection rejection (Property 17)
+    - **Property 17: Shell control tokens in validate commands are rejected**
+    - **Validates: Requirements 7.8**
+  - [ ]* 9.6 Write unit tests for gate
+    - Test boolean pass/fail, numeric extraction, timeout, per-task overrides, `verify` CLI output format
+    - _Requirements: 7.1–7.11_
+
+- [ ] 10. Checkpoint — ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [ ] 11. Implement Progress and RuntimeStatus modules
+  - [ ] 11.1 Write `src/progress/progress.ts` implementing `appendProgress(entry, filePath)` that appends a human-readable line to `progress.txt`
+    - Entries include `task_id`, `task_name`, `status`, relevant counts/reasons, UTC timestamp
+    - File is append-only; never modify existing content
+    - _Requirements: 14.1, 14.2, 14.3, 14.4_
+  - [ ]* 11.2 Write property test for progress file append-only (Property 23)
+    - **Property 23: Progress file is append-only**
+    - **Validates: Requirements 14.4**
+  - [ ] 11.3 Write `src/runtimeStatus/runtimeStatus.ts` implementing `writeRuntimeStatus(status, config)` and `readRuntimeStatus(config)`
+    - Writes `logs/runtime-status.json` and `logs/dashboard.html` (static self-contained HTML)
+    - _Requirements: 6.12, 15.3_
+  - [ ]* 11.4 Write unit tests for progress and runtimeStatus
+    - Test append behavior, JSON status output, HTML generation
+    - _Requirements: 14.1–14.4, 15.1–15.4_
+
+- [ ] 12. Implement Heartbeat module
+  - [ ] 12.1 Write `src/heartbeat/heartbeat.ts` implementing `Heartbeat` class with `start(taskTitle)`, `stop()`, and `tick()` that emits elapsed time and streaming status to terminal every `heartbeat_interval` seconds
+    - _Requirements: 6.11_
+  - [ ]* 12.2 Write unit tests for heartbeat
+    - Test tick emission, stop clears interval, elapsed time calculation
+    - _Requirements: 6.11_
+
+- [ ] 13. Implement Reflection module
+  - [ ] 13.1 Write `src/reflection/reflection.ts` implementing `reflect(task, attemptLogTail, config, backend)` returning a refined `Task`
+    - Invoke backend with log tail to produce refined `steps`, `docs`, `verification`, `implementation_notes`
+    - Preserve `id`, `title`, `description`, `completion`, `execution` exactly; reject any attempt to change them
+    - Append to `task.attempt_history` (capped at `max_attempt_history_entries`) and `task.learning_notes` (capped at `max_learning_notes`)
+    - Append to top-level `learning_journal` (capped at `max_project_learning_entries`)
+    - Skip refinement when `max_refinements_per_task` reached
+    - _Requirements: 8.1, 8.2, 8.3, 8.4, 8.5_
+  - [ ]* 13.2 Write property test for reflection immutable fields (Property 18)
+    - **Property 18: Reflection preserves immutable task fields**
+    - **Validates: Requirements 8.2**
+  - [ ]* 13.3 Write unit tests for reflection
+    - Test field preservation, cap enforcement, skip when max refinements reached
+    - _Requirements: 8.1–8.5_
+
+- [ ] 14. Implement ExperimentMode
+  - [ ] 14.1 Write `src/runner/experiment.ts` implementing `runExperiment(task, config, deps)` with the full iterative loop
+    - Baseline measurement with `enforceChangeRequirements=false`; block task if baseline fails
+    - Per-iteration: invoke backend → snapshot → create experiment commit → run gate → compare metric
+    - Retain commit on `improved`; revert on `regressed` (when `rollback_on_failure=true`) or `unchanged` (when `keep_on_equal=false`)
+    - Stop on `target_met`, `stop_after_no_improvement` streak, or `max_iterations` reached
+    - Block immediately if project is not a git repo
+    - Skip gate and count as invalid when no files changed
+    - Append JSONL entry to `logs/experiments.jsonl` after each iteration
+    - _Requirements: 9.1–9.11_
+  - [ ]* 14.2 Write property test for experiment log entry fields (Property 19)
+    - **Property 19: Experiment log entries contain required fields**
+    - **Validates: Requirements 9.9**
+  - [ ]* 14.3 Write unit tests for experiment mode
+    - Test baseline failure blocks task, improved retains commit, regressed reverts, streak stop, non-git repo blocks
+    - _Requirements: 9.1–9.11_
+
+- [ ] 15. Implement main Runner
+  - [ ] 15.1 Write `src/runner/prompt.ts` implementing `buildPrompt(task, config, learningNotes, journalEntries)` that renders the full prompt string including task steps, docs, learning notes, and journal entries
+    - Include most recent `prompt_learning_limit` entries from `task.learning_notes` and `learning_journal`
+    - _Requirements: 6.1, 8.6_
+  - [ ] 15.2 Write `src/runner/runner.ts` implementing `runTasks(config, opts)` — the main automation loop
+    - Select next pending task → build prompt → invoke backend → snapshot diff → evaluate gate
+    - On gate pass: mark completed, auto-commit, append progress, update runtime status, proceed to next task
+    - On gate fail with retries: invoke reflection, retry with refined task
+    - On retries exhausted: block task, append progress, proceed to next task
+    - Respect `--dry-run` (print prompt, no backend invocation), `--backend`, `--max-tasks`, `--epochs`
+    - Handle exit code 130 as clean SIGINT stop
+    - Scan attempt log for environment error halt patterns; stop without blocking task
+    - Start/stop heartbeat around each backend invocation
+    - Write runtime status after each significant state change
+    - Delegate to `runExperiment` when `execution.strategy = "iterative"`
+    - _Requirements: 6.1–6.12_
+  - [ ]* 15.3 Write unit tests for runner
+    - Test dry-run, SIGINT handling, gate pass → commit → next, gate fail → reflect → retry, retries exhausted → block, max-tasks limit, environment error halt
+    - _Requirements: 6.1–6.12_
+
+- [ ] 16. Checkpoint — ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [ ] 17. Implement Init module
+  - [ ] 17.1 Write `src/init/init.ts` implementing `initProject(dir, tool, config)` that creates all scaffolding files
+    - Create `spec-monkey.toml`, `task.json`, `AGENT.md`, `TASK.md`, `progress.txt`, `logs/` directory
+    - Scaffold tool-native wrapper files for the specified `--use` tool (default: `codex`)
+    - Copy default shared skills into `.skills/`
+    - Create target directory if it does not exist
+    - Skip `spec-monkey.toml` if it already exists and print a notice
+    - On re-init with a different `--use`, add new tool wrapper without overwriting existing files
+    - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7_
+  - [ ]* 17.2 Write property test for non-destructive re-init (Property 24)
+    - **Property 24: Non-destructive re-init**
+    - **Validates: Requirements 1.4, 1.7**
+  - [ ]* 17.3 Write unit tests for init
+    - Test directory creation, file scaffolding, skip-existing toml, re-init adds wrapper without overwriting
+    - _Requirements: 1.1–1.7_
+
+- [ ] 18. Implement Planning module
+  - [ ] 18.1 Write `src/runner/plan.ts` (or `src/plan/`) implementing `planTasks(source, config, backend)` and `generateSpec(intent, config, backend)`
+    - Detect COCA headings to skip spec generation when already present
+    - Generate COCASpec, save to `docs/specs/<name>-coca-spec.md`
+    - Generate `task.json` from spec using backend plan command
+    - Parse backend output as JSON; throw `RuntimeError` with first 500 chars if not valid JSON
+    - Throw `RuntimeError` listing present keys if `tasks` array is missing
+    - Run `auditTask` on all generated tasks; reject and print errors if any fail
+    - Inject source document path into each task's `docs` field when planning from a file
+    - Write result to `files.task_json` path and print task count
+    - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8, 5.9_
+  - [ ]* 18.2 Write property test for non-JSON planner output (Property 13)
+    - **Property 13: Non-JSON planner output throws RuntimeError**
+    - **Validates: Requirements 5.4**
+  - [ ]* 18.3 Write unit tests for planning
+    - Test COCA detection, spec generation, task count output, audit rejection, missing `tasks` key error
+    - _Requirements: 5.1–5.9_
+
+- [ ] 19. Implement Skills module
+  - [ ] 19.1 Write `src/skills/skills.ts` implementing `listSkills(dir)`, `recommendSkills(query, limit, dir)`, `doctorSkills(config)`, `installSkills(config)`
+    - `listSkills`: scan `.skills/`, parse one-line description from each `SKILL.md`
+    - `recommendSkills`: match query against descriptions and trigger keywords, return up to `limit` results
+    - `doctorSkills`: verify `.skills/` exists, backend wrapper dir present, symlinks resolve
+    - `installSkills`: create symlinks or copies in tool-native path for configured backend
+    - _Requirements: 16.1, 16.2, 16.3, 16.4_
+  - [ ]* 19.2 Write unit tests for skills
+    - Test list parsing, recommend matching, doctor issue reporting, install symlink creation
+    - _Requirements: 16.1–16.4_
+
+- [ ] 20. Implement Detach module
+  - [ ] 20.1 Write `src/detach/detach.ts` implementing `detachRun`, `listSessions`, `attachSession`, `stopSession`, `stopAllSessions`
+    - `detachRun`: create tmux session named `<prefix>-<project-name>`, run `spec-monkey run` inside it
+    - `listSessions`: list tmux sessions matching prefix, show name and start time
+    - `attachSession` / `stopSession` / `stopAllSessions`: delegate to `tmux` commands
+    - Throw descriptive error when `tmux` is not in PATH
+    - _Requirements: 13.1, 13.2, 13.3, 13.4, 13.5, 13.6_
+  - [ ]* 20.2 Write unit tests for detach
+    - Test session naming, tmux-not-found error, stop-all filtering by prefix
+    - _Requirements: 13.1–13.6_
+
+- [ ] 21. Implement Dashboard
+  - [ ] 21.1 Write `src/dashboard/server.ts` implementing `startDashboard(config)` that starts an HTTP server
+    - Scan configured project directories for `logs/runtime-status.json` files
+    - Serve a self-contained HTML page with task counts, current task title, recent log tail
+    - Auto-refresh via `<meta http-equiv="refresh">` or `fetch` polling (≤5 second cycle)
+    - Print install hint and exit 1 when optional web dependency is absent
+    - _Requirements: 17.1, 17.2, 17.3, 17.4, 17.5_
+  - [ ]* 21.2 Write unit tests for dashboard
+    - Test server startup, project discovery, HTML self-containment, missing-dependency hint
+    - _Requirements: 17.1–17.5_
+
+- [ ] 22. Wire CLI entry point
+  - [ ] 22.1 Write `src/cli.ts` registering all subcommands with `commander`
+    - Top-level commands: `init`, `run`, `plan`, `spec`, `task` (with sub-commands `list`, `next`, `reset`, `retry`, `block`), `verify`, `status`, `install-skills`, `skills` (with sub-commands `list`, `recommend`, `doctor`), `list`, `attach`, `stop`, `web`
+    - Global `-c/--config` flag passed to all commands that need config
+    - `--version` flag reads version from `package.json`
+    - Print help and exit 0 when no subcommand provided
+    - Print error and exit non-zero for unknown subcommands
+    - Print clear error suggesting `spec-monkey init` when `spec-monkey.toml` is missing for commands that require it
+    - Top-level `process.on('uncaughtException')` handler: print stack, exit 1
+    - `process.on('SIGINT')`: exit 130
+    - _Requirements: 18.1, 18.2, 18.3, 18.4, 18.5, 18.6, 18.7_
+  - [ ]* 22.2 Write unit tests for CLI entry point
+    - Test `--version`, missing config error, unknown subcommand exit code, `--help` exit 0
+    - _Requirements: 18.1–18.7_
+
+- [ ] 23. Final checkpoint — ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+## Notes
+
+- Tasks marked with `*` are optional and can be skipped for faster MVP
+- Each task references specific requirements for traceability
+- Property tests use `fast-check` with `numRuns: 100` minimum and include a comment `// Feature: spec-monkey, Property N: <text>`
+- Unit tests use `vitest`; run with `vitest --run` for single-pass execution
+- All modules use strict ESM with `.js` extensions on imports (NodeNext resolution)
+- No module imports from another module's internal files — only from its `index.ts` barrel
