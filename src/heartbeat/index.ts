@@ -1,1 +1,1 @@
-export {};
+export { Heartbeat } from './heartbeat.js';

@@ -13,11 +13,11 @@ Implement `spec-monkey` as a Node.js/TypeScript ESM CLI tool — a ground-up rew
   - Create `src/types.ts` with shared interfaces: `GateCheck`, `GateResult`, `GateMetricResult`, `MetricOutcome`, `SnapshotEntry`, `Snapshot`, `RuntimeStatus`, `ExperimentLogEntry`, `CommandSpec`, `BackendResult`
   - _Requirements: 19.1, 19.2, 19.4, 19.6_
 
-- [ ] 2. Implement Config module
-  - [ ] 2.1 Write `src/config/schema.ts` with the full `SpecMonkeyConfigSchema` zod object (all sections with defaults) and export `SpecMonkeyConfig` type
+- [x] 2. Implement Config module
+  - [x] 2.1 Write `src/config/schema.ts` with the full `SpecMonkeyConfigSchema` zod object (all sections with defaults) and export `SpecMonkeyConfig` type
     - Include all sections: `project`, `backend`, `run`, `files`, `verification`, `reflection`, `snapshot`, `circuit_breaker`, `git`, `detach`
     - _Requirements: 2.1, 2.2, 19.3_
-  - [ ] 2.2 Write `src/config/loader.ts` implementing `loadConfig(path?: string): Promise<SpecMonkeyConfig>`
+  - [x] 2.2 Write `src/config/loader.ts` implementing `loadConfig(path?: string): Promise<SpecMonkeyConfig>`
     - Discover `spec-monkey.toml` by walking up from cwd when path is omitted
     - Parse TOML, alias `[gate]` → `[verification]`, apply `SPEC_MONKEY_*` env overrides with type coercion, validate with zod, resolve relative paths
     - Throw `ConfigError` for invalid `backend.default` or zod parse failure
@@ -41,11 +41,11 @@ Implement `spec-monkey` as a Node.js/TypeScript ESM CLI tool — a ground-up rew
     - Test `[gate]` alias, missing file error, TOML parse error, env override coercion
     - _Requirements: 2.1–2.6_
 
-- [ ] 3. Implement TaskStore module
-  - [ ] 3.1 Write `src/taskStore/schema.ts` with `TaskSchema`, `TaskStoreSchema`, and exported `Task`/`TaskStore` types
+- [x] 3. Implement TaskStore module
+  - [x] 3.1 Write `src/taskStore/schema.ts` with `TaskSchema`, `TaskStoreSchema`, and exported `Task`/`TaskStore` types
     - Include all fields with defaults: `passes`, `blocked`, `block_reason`, `attempt_history`, `learning_notes`
     - _Requirements: 4.1, 4.9, 19.3_
-  - [ ] 3.2 Write `src/taskStore/store.ts` implementing `loadTaskStore`, `saveTaskStore`, `getNextPendingTask`, `markTaskPassed`, `blockTask`, `resetTasks`, `retryBlockedTasks`, `auditTask`
+  - [x] 3.2 Write `src/taskStore/store.ts` implementing `loadTaskStore`, `saveTaskStore`, `getNextPendingTask`, `markTaskPassed`, `blockTask`, `resetTasks`, `retryBlockedTasks`, `auditTask`
     - `auditTask` validates `id`, `title`, `description`, non-empty `steps`, valid `completion` contract
     - `blockTask` sets `blocked=true`, `block_reason`, and `blocked_at` ISO timestamp
     - `markTaskPassed` sets `passes=true` and `completed_at` ISO timestamp
@@ -69,22 +69,22 @@ Implement `spec-monkey` as a Node.js/TypeScript ESM CLI tool — a ground-up rew
     - Test load failure, malformed JSON, list/next/block/reset/retry operations
     - _Requirements: 4.1–4.10_
 
-- [ ] 4. Checkpoint — ensure all tests pass
+- [x] 4. Checkpoint — ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 5. Implement Backend Adapters
-  - [ ] 5.1 Write `src/backends/types.ts` with `BackendAdapter` interface and `BuildCommandOpts`
+- [x] 5. Implement Backend Adapters
+  - [x] 5.1 Write `src/backends/types.ts` with `BackendAdapter` interface and `BuildCommandOpts`
     - _Requirements: 3.7_
-  - [ ] 5.2 Write `src/backends/claude.ts`, `codex.ts`, `gemini.ts`, `opencode.ts` each exporting a `BackendAdapter`
+  - [x] 5.2 Write `src/backends/claude.ts`, `codex.ts`, `gemini.ts`, `opencode.ts` each exporting a `BackendAdapter`
     - Claude: `claude -p` + `--dangerously-skip-permissions` when `skip_permissions=true`
     - Codex: `codex exec --yolo` or `--full-auto --dangerously-bypass-approvals-and-sandbox`
     - Gemini: `gemini -p` + `--yolo` when `yolo=true`
     - OpenCode: `opencode run` + `OPENCODE_PERMISSION` env var injection
     - Each adapter checks binary existence in PATH and throws `BackendNotFoundError` if missing
     - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.8_
-  - [ ] 5.3 Write `src/backends/index.ts` with `REGISTRY` and `getBackend(name)` factory
+  - [x] 5.3 Write `src/backends/index.ts` with `REGISTRY` and `getBackend(name)` factory
     - _Requirements: 3.7_
-  - [ ] 5.4 Write `src/backends/executor.ts` implementing `spawnBackend` that spawns the process, merges stdout/stderr, tees to attempt log + main log + process.stdout, and returns `BackendResult`
+  - [x] 5.4 Write `src/backends/executor.ts` implementing `spawnBackend` that spawns the process, merges stdout/stderr, tees to attempt log + main log + process.stdout, and returns `BackendResult`
     - Handle exit code 130 (SIGINT) as a clean stop signal
     - _Requirements: 6.1, 6.9_
   - [ ]* 5.5 Write property test for backend command building (Property 6)
@@ -97,8 +97,8 @@ Implement `spec-monkey` as a Node.js/TypeScript ESM CLI tool — a ground-up rew
     - Test each backend's flag construction, `BackendNotFoundError` when binary absent, non-zero exit throws `RuntimeError`
     - _Requirements: 3.1–3.8_
 
-- [ ] 6. Implement Snapshot module
-  - [ ] 6.1 Write `src/snapshot/snapshot.ts` implementing `takeSnapshot(dirs, config)` and `diffSnapshots(before, after)`
+- [x] 6. Implement Snapshot module
+  - [x] 6.1 Write `src/snapshot/snapshot.ts` implementing `takeSnapshot(dirs, config)` and `diffSnapshots(before, after)`
     - Walk directories recursively, record path + mtime + size
     - Apply `ignore_dirs`, `ignore_path_globs`, `include_path_globs` filters
     - Filter spec-monkey runtime artifacts (`task.json`, `progress.txt`, `logs/`) from diff output
@@ -113,8 +113,8 @@ Implement `spec-monkey` as a Node.js/TypeScript ESM CLI tool — a ground-up rew
     - Test diff with added/modified/deleted files, glob filtering, include_path_globs
     - _Requirements: 11.1–11.6_
 
-- [ ] 7. Implement GitOps module
-  - [ ] 7.1 Write `src/gitOps/gitOps.ts` implementing `autoCommit`, `createExperimentCommit`, `revertCommit`, `readRecentGitHistory`, `isGitRepo`
+- [x] 7. Implement GitOps module
+  - [x] 7.1 Write `src/gitOps/gitOps.ts` implementing `autoCommit`, `createExperimentCommit`, `revertCommit`, `readRecentGitHistory`, `isGitRepo`
     - `isGitRepo`: check for `.git` directory; all operations return no-op result when false
     - Detect `.git/index.lock` and return no-op with warning
     - Log stderr and return no-op on `git add`/`git commit` failure
@@ -124,8 +124,8 @@ Implement `spec-monkey` as a Node.js/TypeScript ESM CLI tool — a ground-up rew
     - Test commit creation, revert, history read, no-op when not a git repo, index.lock handling
     - _Requirements: 10.1–10.7_
 
-- [ ] 8. Implement CircuitBreaker module
-  - [ ] 8.1 Write `src/circuitBreaker/circuitBreaker.ts` implementing `CircuitBreaker` class with `recordAttempt`, `recordRateLimit`, `isTripped`, `reset`, and `getReason`
+- [x] 8. Implement CircuitBreaker module
+  - [x] 8.1 Write `src/circuitBreaker/circuitBreaker.ts` implementing `CircuitBreaker` class with `recordAttempt`, `recordRateLimit`, `isTripped`, `reset`, and `getReason`
     - Track consecutive no-progress attempts and consecutive identical-error attempts
     - Detect rate-limit patterns from config; pause for `rate_limit_cooldown` seconds
     - _Requirements: 12.1, 12.2, 12.3, 12.4_
@@ -136,8 +136,8 @@ Implement `spec-monkey` as a Node.js/TypeScript ESM CLI tool — a ground-up rew
     - Test trip at threshold, no-trip below threshold, rate-limit detection, reset
     - _Requirements: 12.1–12.4_
 
-- [ ] 9. Implement Gate module
-  - [ ] 9.1 Write `src/gate/gate.ts` implementing `runGate(task, changedFiles, config, opts)` returning `GateResult`
+- [x] 9. Implement Gate module
+  - [x] 9.1 Write `src/gate/gate.ts` implementing `runGate(task, changedFiles, config, opts)` returning `GateResult`
     - Boolean gate: all validate commands exit 0 AND changed file count ≥ min
     - Numeric gate: extract metric via `json_path` from last successful command's JSON stdout
     - Classify metric outcome: `improved`, `unchanged`, `regressed`, `target_met`
@@ -162,33 +162,33 @@ Implement `spec-monkey` as a Node.js/TypeScript ESM CLI tool — a ground-up rew
     - Test boolean pass/fail, numeric extraction, timeout, per-task overrides, `verify` CLI output format
     - _Requirements: 7.1–7.11_
 
-- [ ] 10. Checkpoint — ensure all tests pass
+- [x] 10. Checkpoint — ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 11. Implement Progress and RuntimeStatus modules
-  - [ ] 11.1 Write `src/progress/progress.ts` implementing `appendProgress(entry, filePath)` that appends a human-readable line to `progress.txt`
+- [x] 11. Implement Progress and RuntimeStatus modules
+  - [x] 11.1 Write `src/progress/progress.ts` implementing `appendProgress(entry, filePath)` that appends a human-readable line to `progress.txt`
     - Entries include `task_id`, `task_name`, `status`, relevant counts/reasons, UTC timestamp
     - File is append-only; never modify existing content
     - _Requirements: 14.1, 14.2, 14.3, 14.4_
   - [ ]* 11.2 Write property test for progress file append-only (Property 23)
     - **Property 23: Progress file is append-only**
     - **Validates: Requirements 14.4**
-  - [ ] 11.3 Write `src/runtimeStatus/runtimeStatus.ts` implementing `writeRuntimeStatus(status, config)` and `readRuntimeStatus(config)`
+  - [x] 11.3 Write `src/runtimeStatus/runtimeStatus.ts` implementing `writeRuntimeStatus(status, config)` and `readRuntimeStatus(config)`
     - Writes `logs/runtime-status.json` and `logs/dashboard.html` (static self-contained HTML)
     - _Requirements: 6.12, 15.3_
   - [ ]* 11.4 Write unit tests for progress and runtimeStatus
     - Test append behavior, JSON status output, HTML generation
     - _Requirements: 14.1–14.4, 15.1–15.4_
 
-- [ ] 12. Implement Heartbeat module
-  - [ ] 12.1 Write `src/heartbeat/heartbeat.ts` implementing `Heartbeat` class with `start(taskTitle)`, `stop()`, and `tick()` that emits elapsed time and streaming status to terminal every `heartbeat_interval` seconds
+- [x] 12. Implement Heartbeat module
+  - [x] 12.1 Write `src/heartbeat/heartbeat.ts` implementing `Heartbeat` class with `start(taskTitle)`, `stop()`, and `tick()` that emits elapsed time and streaming status to terminal every `heartbeat_interval` seconds
     - _Requirements: 6.11_
   - [ ]* 12.2 Write unit tests for heartbeat
     - Test tick emission, stop clears interval, elapsed time calculation
     - _Requirements: 6.11_
 
-- [ ] 13. Implement Reflection module
-  - [ ] 13.1 Write `src/reflection/reflection.ts` implementing `reflect(task, attemptLogTail, config, backend)` returning a refined `Task`
+- [x] 13. Implement Reflection module
+  - [x] 13.1 Write `src/reflection/reflection.ts` implementing `reflect(task, attemptLogTail, config, backend)` returning a refined `Task`
     - Invoke backend with log tail to produce refined `steps`, `docs`, `verification`, `implementation_notes`
     - Preserve `id`, `title`, `description`, `completion`, `execution` exactly; reject any attempt to change them
     - Append to `task.attempt_history` (capped at `max_attempt_history_entries`) and `task.learning_notes` (capped at `max_learning_notes`)
@@ -202,8 +202,8 @@ Implement `spec-monkey` as a Node.js/TypeScript ESM CLI tool — a ground-up rew
     - Test field preservation, cap enforcement, skip when max refinements reached
     - _Requirements: 8.1–8.5_
 
-- [ ] 14. Implement ExperimentMode
-  - [ ] 14.1 Write `src/runner/experiment.ts` implementing `runExperiment(task, config, deps)` with the full iterative loop
+- [x] 14. Implement ExperimentMode
+  - [x] 14.1 Write `src/runner/experiment.ts` implementing `runExperiment(task, config, deps)` with the full iterative loop
     - Baseline measurement with `enforceChangeRequirements=false`; block task if baseline fails
     - Per-iteration: invoke backend → snapshot → create experiment commit → run gate → compare metric
     - Retain commit on `improved`; revert on `regressed` (when `rollback_on_failure=true`) or `unchanged` (when `keep_on_equal=false`)
@@ -219,11 +219,11 @@ Implement `spec-monkey` as a Node.js/TypeScript ESM CLI tool — a ground-up rew
     - Test baseline failure blocks task, improved retains commit, regressed reverts, streak stop, non-git repo blocks
     - _Requirements: 9.1–9.11_
 
-- [ ] 15. Implement main Runner
-  - [ ] 15.1 Write `src/runner/prompt.ts` implementing `buildPrompt(task, config, learningNotes, journalEntries)` that renders the full prompt string including task steps, docs, learning notes, and journal entries
+- [x] 15. Implement main Runner
+  - [x] 15.1 Write `src/runner/prompt.ts` implementing `buildPrompt(task, config, learningNotes, journalEntries)` that renders the full prompt string including task steps, docs, learning notes, and journal entries
     - Include most recent `prompt_learning_limit` entries from `task.learning_notes` and `learning_journal`
     - _Requirements: 6.1, 8.6_
-  - [ ] 15.2 Write `src/runner/runner.ts` implementing `runTasks(config, opts)` — the main automation loop
+  - [x] 15.2 Write `src/runner/runner.ts` implementing `runTasks(config, opts)` — the main automation loop
     - Select next pending task → build prompt → invoke backend → snapshot diff → evaluate gate
     - On gate pass: mark completed, auto-commit, append progress, update runtime status, proceed to next task
     - On gate fail with retries: invoke reflection, retry with refined task
@@ -239,11 +239,11 @@ Implement `spec-monkey` as a Node.js/TypeScript ESM CLI tool — a ground-up rew
     - Test dry-run, SIGINT handling, gate pass → commit → next, gate fail → reflect → retry, retries exhausted → block, max-tasks limit, environment error halt
     - _Requirements: 6.1–6.12_
 
-- [ ] 16. Checkpoint — ensure all tests pass
+- [x] 16. Checkpoint — ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 17. Implement Init module
-  - [ ] 17.1 Write `src/init/init.ts` implementing `initProject(dir, tool, config)` that creates all scaffolding files
+- [x] 17. Implement Init module
+  - [x] 17.1 Write `src/init/init.ts` implementing `initProject(dir, tool, config)` that creates all scaffolding files
     - Create `spec-monkey.toml`, `task.json`, `AGENT.md`, `TASK.md`, `progress.txt`, `logs/` directory
     - Scaffold tool-native wrapper files for the specified `--use` tool (default: `codex`)
     - Copy default shared skills into `.skills/`
@@ -258,8 +258,8 @@ Implement `spec-monkey` as a Node.js/TypeScript ESM CLI tool — a ground-up rew
     - Test directory creation, file scaffolding, skip-existing toml, re-init adds wrapper without overwriting
     - _Requirements: 1.1–1.7_
 
-- [ ] 18. Implement Planning module
-  - [ ] 18.1 Write `src/runner/plan.ts` (or `src/plan/`) implementing `planTasks(source, config, backend)` and `generateSpec(intent, config, backend)`
+- [x] 18. Implement Planning module
+  - [x] 18.1 Write `src/runner/plan.ts` (or `src/plan/`) implementing `planTasks(source, config, backend)` and `generateSpec(intent, config, backend)`
     - Detect COCA headings to skip spec generation when already present
     - Generate COCASpec, save to `docs/specs/<name>-coca-spec.md`
     - Generate `task.json` from spec using backend plan command
@@ -276,8 +276,8 @@ Implement `spec-monkey` as a Node.js/TypeScript ESM CLI tool — a ground-up rew
     - Test COCA detection, spec generation, task count output, audit rejection, missing `tasks` key error
     - _Requirements: 5.1–5.9_
 
-- [ ] 19. Implement Skills module
-  - [ ] 19.1 Write `src/skills/skills.ts` implementing `listSkills(dir)`, `recommendSkills(query, limit, dir)`, `doctorSkills(config)`, `installSkills(config)`
+- [x] 19. Implement Skills module
+  - [x] 19.1 Write `src/skills/skills.ts` implementing `listSkills(dir)`, `recommendSkills(query, limit, dir)`, `doctorSkills(config)`, `installSkills(config)`
     - `listSkills`: scan `.skills/`, parse one-line description from each `SKILL.md`
     - `recommendSkills`: match query against descriptions and trigger keywords, return up to `limit` results
     - `doctorSkills`: verify `.skills/` exists, backend wrapper dir present, symlinks resolve
@@ -287,8 +287,8 @@ Implement `spec-monkey` as a Node.js/TypeScript ESM CLI tool — a ground-up rew
     - Test list parsing, recommend matching, doctor issue reporting, install symlink creation
     - _Requirements: 16.1–16.4_
 
-- [ ] 20. Implement Detach module
-  - [ ] 20.1 Write `src/detach/detach.ts` implementing `detachRun`, `listSessions`, `attachSession`, `stopSession`, `stopAllSessions`
+- [x] 20. Implement Detach module
+  - [x] 20.1 Write `src/detach/detach.ts` implementing `detachRun`, `listSessions`, `attachSession`, `stopSession`, `stopAllSessions`
     - `detachRun`: create tmux session named `<prefix>-<project-name>`, run `spec-monkey run` inside it
     - `listSessions`: list tmux sessions matching prefix, show name and start time
     - `attachSession` / `stopSession` / `stopAllSessions`: delegate to `tmux` commands
@@ -298,8 +298,8 @@ Implement `spec-monkey` as a Node.js/TypeScript ESM CLI tool — a ground-up rew
     - Test session naming, tmux-not-found error, stop-all filtering by prefix
     - _Requirements: 13.1–13.6_
 
-- [ ] 21. Implement Dashboard
-  - [ ] 21.1 Write `src/dashboard/server.ts` implementing `startDashboard(config)` that starts an HTTP server
+- [x] 21. Implement Dashboard
+  - [x] 21.1 Write `src/dashboard/server.ts` implementing `startDashboard(config)` that starts an HTTP server
     - Scan configured project directories for `logs/runtime-status.json` files
     - Serve a self-contained HTML page with task counts, current task title, recent log tail
     - Auto-refresh via `<meta http-equiv="refresh">` or `fetch` polling (≤5 second cycle)
@@ -309,8 +309,8 @@ Implement `spec-monkey` as a Node.js/TypeScript ESM CLI tool — a ground-up rew
     - Test server startup, project discovery, HTML self-containment, missing-dependency hint
     - _Requirements: 17.1–17.5_
 
-- [ ] 22. Wire CLI entry point
-  - [ ] 22.1 Write `src/cli.ts` registering all subcommands with `commander`
+- [x] 22. Wire CLI entry point
+  - [x] 22.1 Write `src/cli.ts` registering all subcommands with `commander`
     - Top-level commands: `init`, `run`, `plan`, `spec`, `task` (with sub-commands `list`, `next`, `reset`, `retry`, `block`), `verify`, `status`, `install-skills`, `skills` (with sub-commands `list`, `recommend`, `doctor`), `list`, `attach`, `stop`, `web`
     - Global `-c/--config` flag passed to all commands that need config
     - `--version` flag reads version from `package.json`
@@ -324,7 +324,7 @@ Implement `spec-monkey` as a Node.js/TypeScript ESM CLI tool — a ground-up rew
     - Test `--version`, missing config error, unknown subcommand exit code, `--help` exit 0
     - _Requirements: 18.1–18.7_
 
-- [ ] 23. Final checkpoint — ensure all tests pass
+- [x] 23. Final checkpoint — ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 ## Notes
