@@ -35,6 +35,90 @@ async function readBackendOutput(logFile: string): Promise<string> {
   }
 }
 
+/** Strip ANSI escape codes from a string. */
+function stripAnsi(str: string): string {
+  // eslint-disable-next-line no-control-regex
+  return str.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '').replace(/\x1b\][^\x07]*\x07/g, '');
+}
+
+/**
+ * Extract the first JSON object or array from raw backend output.
+ * Handles:
+ * - ANSI escape codes
+ * - Markdown fences (```json ... ```)
+ * - `codex exec --json` JSONL stream (extracts last assistant message content)
+ * - Surrounding prose
+ */
+function extractJson(raw: string): string {
+  const clean = stripAnsi(raw);
+
+  // Handle `codex exec --json` JSONL output — find the agent_message item
+  const lines = clean.split('\n').filter(Boolean);
+  const jsonlLines = lines.filter(l => l.trimStart().startsWith('{'));
+  if (jsonlLines.length > 0) {
+    for (let i = jsonlLines.length - 1; i >= 0; i--) {
+      try {
+        const obj = JSON.parse(jsonlLines[i]) as Record<string, unknown>;
+        // codex exec --json emits {type:"item.completed", item:{type:"agent_message", text:"..."}}
+        if (obj['type'] === 'item.completed') {
+          const item = obj['item'] as Record<string, unknown> | undefined;
+          if (item && item['type'] === 'agent_message' && typeof item['text'] === 'string') {
+            return extractJson(item['text'] as string);
+          }
+        }
+        // fallback: generic content/message/text fields
+        const content = obj['content'] ?? obj['message'] ?? obj['text'];
+        if (typeof content === 'string' && content.trim().length > 0) {
+          return extractJson(content);
+        }
+        if (Array.isArray(content)) {
+          for (const part of content as Array<Record<string, unknown>>) {
+            if (typeof part['text'] === 'string' && part['text'].trim().length > 0) {
+              return extractJson(part['text'] as string);
+            }
+          }
+        }
+      } catch {
+        // not valid JSON line, skip
+      }
+    }
+  }
+
+  // Try stripping markdown fences: ```json ... ``` or ``` ... ```
+  const fenceMatch = clean.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (fenceMatch) {
+    return fenceMatch[1].trim();
+  }
+
+  // Find the first { or [ and extract the balanced block
+  const start = Math.min(
+    clean.indexOf('{') === -1 ? Infinity : clean.indexOf('{'),
+    clean.indexOf('[') === -1 ? Infinity : clean.indexOf('['),
+  );
+  if (start === Infinity) return clean.trim();
+
+  const opener = clean[start];
+  const closer = opener === '{' ? '}' : ']';
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+
+  for (let i = start; i < clean.length; i++) {
+    const ch = clean[i];
+    if (escape) { escape = false; continue; }
+    if (ch === '\\' && inString) { escape = true; continue; }
+    if (ch === '"') { inString = !inString; continue; }
+    if (inString) continue;
+    if (ch === opener) depth++;
+    else if (ch === closer) {
+      depth--;
+      if (depth === 0) return clean.slice(start, i + 1);
+    }
+  }
+
+  return clean.slice(start).trim();
+}
+
 export async function generateSpec(
   intent: string,
   config: SpecMonkeyConfig,
@@ -143,10 +227,10 @@ ${spec}`;
 
   const rawOutput = await readBackendOutput(attemptLogFile);
 
-  // Parse as JSON
+  // Parse as JSON — strip ANSI/prose and extract the JSON block
   let parsed: unknown;
   try {
-    parsed = JSON.parse(rawOutput);
+    parsed = JSON.parse(extractJson(rawOutput));
   } catch {
     throw new RuntimeError(
       `Backend returned non-JSON output. First 500 chars: ${rawOutput.slice(0, 500)}`,
